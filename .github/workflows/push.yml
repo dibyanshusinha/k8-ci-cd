@@ -1,0 +1,177 @@
+name: CI_CD
+
+on: [push]
+
+jobs:
+
+  unit_test_client:
+    runs-on: ubuntu-latest
+    container:
+      image: node
+
+    steps:
+      - name: Pull latest code
+        uses: actions/checkout@master
+      
+      - name: Install & Tests
+        working-directory: ./client
+        run: |
+          npm install
+          npm test -- --coverage
+  
+  build_push_client:
+    runs-on: ubuntu-latest
+    needs: unit_test_client
+
+    steps:
+
+      - name: Pull latest code
+        uses: actions/checkout@master
+
+      - name: Get Package name
+        run:  |
+          echo ::set-env name=PACKAGE_NAME::$(echo ${{ secrets.DOCKER_ID }}/${{github.event.repository.name}}-client)
+        shell: bash
+
+      - name: Docker login
+        run:  docker login -u ${{ secrets.DOCKER_ID }} -p ${{ secrets.DOCKER_PASSWORD }} docker.io
+
+      - name: Build and Tag
+        run: docker build -t ${PACKAGE_NAME}:${GITHUB_SHA:0:7} -t ${PACKAGE_NAME}:$(echo ${GITHUB_REF:11} | sed 's;/;_;g') -f ./client/Dockerfile ./client
+
+      - name: Push to Docker Hub
+        run: | 
+          docker push ${PACKAGE_NAME}:${GITHUB_SHA:0:7} 
+          docker push ${PACKAGE_NAME}:$(echo ${GITHUB_REF:11} | sed 's;/;_;g')
+      - name: Tag stable and push
+        if: github.ref == 'refs/heads/master'
+        run: | 
+          docker tag ${PACKAGE_NAME}:${GITHUB_SHA:0:7}  ${PACKAGE_NAME}:stable
+          docker push ${PACKAGE_NAME}:stable
+      - name: Tag latest and push
+        if: github.ref == 'refs/heads/development'
+        run: | 
+          docker tag ${PACKAGE_NAME}:${GITHUB_SHA:0:7}  ${PACKAGE_NAME}:latest
+          docker push ${PACKAGE_NAME}:latest
+  unit_test_api:
+    runs-on: ubuntu-latest
+    container:
+      image: node
+
+    steps:
+      - name: Pull latest code
+        uses: actions/checkout@master
+      
+      - name: Install & Tests
+        working-directory: ./server
+        run: |
+          npm install
+          npm test -- --coverage
+  
+  build_push_api:
+    runs-on: ubuntu-latest
+    needs: unit_test_api
+
+    steps:
+
+      - name: Pull latest code
+        uses: actions/checkout@master
+
+      - name: Get Package name
+        run:  |
+          echo ::set-env name=PACKAGE_NAME::$(echo ${{ secrets.DOCKER_ID }}/${{github.event.repository.name}}-server)
+        shell: bash
+
+      - name: Docker login
+        run:  docker login -u ${{ secrets.DOCKER_ID }} -p ${{ secrets.DOCKER_PASSWORD }} docker.io
+
+      - name: Build and Tag
+        run: docker build -t ${PACKAGE_NAME}:${GITHUB_SHA:0:7} -t ${PACKAGE_NAME}:$(echo ${GITHUB_REF:11} | sed 's;/;_;g') -f ./server/Dockerfile ./server
+
+      - name: Push to Docker Hub
+        run: | 
+          docker push ${PACKAGE_NAME}:${GITHUB_SHA:0:7} 
+          docker push ${PACKAGE_NAME}:$(echo ${GITHUB_REF:11} | sed 's;/;_;g')
+      - name: Tag stable and push
+        if: github.ref == 'refs/heads/master'
+        run: | 
+          docker tag ${PACKAGE_NAME}:${GITHUB_SHA:0:7}  ${PACKAGE_NAME}:stable
+          docker push ${PACKAGE_NAME}:stable
+      - name: Tag latest and push
+        if: github.ref == 'refs/heads/development'
+        run: | 
+          docker tag ${PACKAGE_NAME}:${GITHUB_SHA:0:7}  ${PACKAGE_NAME}:latest
+          docker push ${PACKAGE_NAME}:latest
+  
+  build_push_nginx:
+    runs-on: ubuntu-latest
+    needs: [build_push_api, build_push_client]
+
+    steps:
+
+      - name: Pull latest code
+        uses: actions/checkout@master
+
+      - name: Get Package name
+        run:  |
+          echo ::set-env name=PACKAGE_NAME::$(echo ${{ secrets.DOCKER_ID }}/${{github.event.repository.name}}-nginx)
+        shell: bash
+
+      - name: Docker login
+        run:  docker login -u ${{ secrets.DOCKER_ID }} -p ${{ secrets.DOCKER_PASSWORD }} docker.io
+
+      - name: Build and Tag
+        run: docker build -t ${PACKAGE_NAME}:${GITHUB_SHA:0:7} -t ${PACKAGE_NAME}:$(echo ${GITHUB_REF:11} | sed 's;/;_;g') -f ./nginx/Dockerfile ./nginx
+
+      - name: Push to Docker Hub
+        run: | 
+          docker push ${PACKAGE_NAME}:${GITHUB_SHA:0:7} 
+          docker push ${PACKAGE_NAME}:$(echo ${GITHUB_REF:11} | sed 's;/;_;g')
+
+      - name: Tag stable and push
+        if: github.ref == 'refs/heads/master'
+        run: | 
+          docker tag ${PACKAGE_NAME}:${GITHUB_SHA:0:7}  ${PACKAGE_NAME}:stable
+          docker push ${PACKAGE_NAME}:stable
+
+      - name: Tag latest and push
+        if: github.ref == 'refs/heads/development'
+        run: | 
+          docker tag ${PACKAGE_NAME}:${GITHUB_SHA:0:7}  ${PACKAGE_NAME}:latest
+          docker push ${PACKAGE_NAME}:latest
+
+      - name: Initalise GCP
+        run: |
+          echo ${{secrets.GCP_SERVICEACCOUNT_KEY}} > service-account.json
+          curl https://sdk.cloud.google.com > install.sh
+          bash install.sh --disable-prompts
+          source $HOME/google-cloud-sdk/path.bash.inc
+          gcloud components update kubectl
+          gcloud auth activate-service-account --key-file service-account.json
+          gcloud config set project development-shivom-platform
+          gcloud config set disable_prompts true
+          gcloud config set compute/zone asia-south1-b
+          gcloud container clusters get-credentials platform
+
+      - name: Deploy to GCP
+        if: github.ref == 'refs/heads/development'
+        run: |
+          kubectl apply -f k8
+          kubectl set image deployments/server-deployment server=$(echo ${{ secrets.DOCKER_ID }}/${{github.event.repository.name}}-server):${GITHUB_SHA:0:7}
+          kubectl set image deployments/nginx-deployment nginx=$(echo ${{ secrets.DOCKER_ID }}/${{github.event.repository.name}}-nginx):${GITHUB_SHA:0:7}
+          kubectl set image deployments/client-deployment client=$(echo ${{ secrets.DOCKER_ID }}/${{github.event.repository.name}}-client):${GITHUB_SHA:0:7}
+
+# add the secrets if you need
+
+# gcloud kms decrypt --location global --keyring shivom --key development  --plaintext-file config/service-account.json  --ciphertext-file config/service-account.enc
+# add env vars for kubectl on gcloud
+# kubectl create secret generic nameofsecret --from-literal PGPASSWORD=mypgpassword
+# ingress-nginx by k8s
+# Install helm using cloud shell
+# curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 > get_helm.sh
+# chmod 700 get_helm.sh
+# ./get_helm.sh
+
+
+# helm repo add stable https://kubernetes-charts.storage.googleapis.com/
+# helm install my-nginx stable/nginx-ingress --set rbac.create=true 

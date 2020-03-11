@@ -1,0 +1,43 @@
+version:  '3.7'
+services: 
+  databaseService:
+    image: 'postgres:alpine'
+    environment:
+      - POSTGRES_USER=${PGUSER}
+      - POSTGRES_PASSWORD=${PGPASSWORD}
+      - POSTGRES_DB=${PGDATABASE}
+    volumes: 
+      - ./project_db/localdb/datadir:/var/lib/postgresql/data
+      - ./project_db/initscrpts/dbcreations-with-migrations-runsOnce/init-scripts:/docker-entrypoint-initdb.d
+      - ./project_db/initscrpts/dbcreations-with-migrations-runsOnce/migrations/sqls/up:/migrations
+    ports: 
+      - '5432:${PGPORT}'
+  api: 
+    restart: always
+    build:
+      context: ./apis
+      dockerfile: Dockerfile.dev
+    volumes: 
+      - /app/node_modules
+      - ./apis:/app
+    environment: 
+      - PGUSER=${PGUSER}
+      - PGHOST=${PGHOST}
+      - PGDATABASE=${PGDATABASE}
+      - PGPASSWORD=${PGPASSWORD}
+      - PGPORT=${PGPORT}
+      - APIPORT=${APIPORT}
+  client:
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./client
+    volumes: 
+      - /app/node_modules
+      - ./client:/app
+  nginx:
+    restart: always
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile.dev
+    ports: 
+      - '${EXTERNALWEBPORT}:80'
