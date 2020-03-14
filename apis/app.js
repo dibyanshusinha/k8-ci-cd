@@ -36,7 +36,7 @@ app.use((req, res, next)=>{
 // Express route handlers
 
 app.get('/', (req, res) => {
-  res.send('Working');
+  res.send('Health check - OK');
 });
 
 
