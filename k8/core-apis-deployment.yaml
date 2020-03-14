@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: core-api-pods
+  template:
+    metadata:
+      labels:
+        component: core-api-pods
+    spec:
+      containers:
+        - name: core-api-container
+          image: dibyanshusinha/k8-ci-cd-core-apis
+          ports:
+            - containerPort: 5000
+          env:
+            - name: APIPORT
+              valueFrom:
+                secretKeyRef:
+                  name: env-secret
+                  key: APIPORT
+
+
+# if storing values on secret.yml ensure your values are base64 encoded it will be auto decoded and provided into containers
+# echo -n 'your_env_value' | base64

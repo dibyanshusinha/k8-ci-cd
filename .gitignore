@@ -1,5 +1,7 @@
 #local-db
 /project_db/localdb/
+env-secret.yml
+service-account.json
 
 # misc
 .DS_Store

@@ -16,6 +16,22 @@ app.use((req, res, next) => {
 });
 
 
+//A custom midleware To log requests
+
+app.use((req, res, next)=>{
+	const now = new Date().toString();
+  
+	const log = `${now}: ${req.method} ${req.url}`;
+	console.log(log);
+  
+	// fs.appendFile('server.log', log + '\n' , (err) => {
+	//   if (err) throw err;
+	//   console.log(log);
+	// });
+  
+	next();
+  });
+
 
 // Express route handlers
 

@@ -19,6 +19,10 @@ pgClient.connect()
         console.error(err);
     });
 
+router.route('/').get(async (req, res) => {
+    res.status(200).send({message: "It works"});
+})
+
 
 router.route('/values').get(async (req, res) => {
     const values = await pgClient.query('SELECT * from values');
