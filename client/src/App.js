@@ -8,7 +8,7 @@ function App() {
       <header className="App-header">
         <img src={logo} className="App-logo" alt="logo" />
         <p>
-          Edit <code>src/App.js</code> and save to reload. V1
+          React and node configured with CI/CD-D and Kubernetes
         </p>
         <a
           className="App-link"
